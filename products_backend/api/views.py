@@ -2,6 +2,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+from django.db.models import Sum, F
+from decimal import Decimal
 from .models import Product
 from .serializers import ProductSerializer
 
@@ -104,3 +106,32 @@ def product_detail(request, pk: int):
     if request.method == 'DELETE':
         product.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# PUBLIC_INTERFACE
+@api_view(['GET'])
+def products_total_balance(request):
+    """
+    Compute the total inventory balance.
+
+    Summary:
+        Returns the sum of price * quantity across all Product records.
+
+    Description:
+        Uses Django ORM aggregation with Sum(F('price') * F('quantity')) to compute
+        the total value of stock. Ensures Decimal safety and returns the value as
+        a string with two decimal places.
+
+    Responses:
+        200:
+            JSON object: {"total_balance": "1234.56"}
+            If there are no products, it returns {"total_balance": "0.00"}.
+    """
+    # Use aggregation to compute total, coalesce None to Decimal('0.00')
+    result = Product.objects.aggregate(
+        total=Sum(F('price') * F('quantity'))
+    )
+    total = result.get('total') or Decimal('0.00')
+    # Ensure two decimal places string representation
+    total_str = f"{Decimal(total):.2f}"
+    return Response({"total_balance": total_str}, status=status.HTTP_200_OK)
